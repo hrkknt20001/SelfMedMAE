@@ -14,6 +14,7 @@ import lib.models as models
 import lib.networks as networks
 
 import wandb
+from torch.utils.tensorboard import SummaryWriter
 
 from .base_trainer import BaseTrainer
 from lib.data.med_transforms import get_mae_pretrain_transforms, get_vis_transforms
@@ -88,6 +89,9 @@ class MAE3DTrainer(BaseTrainer):
     
     def run(self):
         args = self.args
+
+        self.writer = SummaryWriter(log_dir=args.output_dir)
+
         # Compute iterations when resuming
         niters = args.start_epoch * self.iters_per_epoch
 
@@ -168,7 +172,7 @@ class MAE3DTrainer(BaseTrainer):
                       f"Forward Time: {forward_time:.03f}s | "
                       f"Backward Time: {bp_time:.03f}s | "
                       f"Loss: {loss.item():.03f}")
-                if args.rank == 0:
+                if args.rank == 0 and not args.disable_wandb:
                     wandb.log(
                         {
                         "lr": optimizer.param_groups[0]['lr'],
@@ -176,6 +180,9 @@ class MAE3DTrainer(BaseTrainer):
                         },
                         step=niters,
                     )
+
+                self.writer.add_scalar("Lr"  , optimizer.param_groups[0]['lr'], niters)
+                self.writer.add_scalar("Loss", loss.item(), niters)
 
             niters += 1
             load_start_time = time.time()
@@ -208,22 +215,24 @@ class MAE3DTrainer(BaseTrainer):
             # vis_grid_hd = patches3d_to_grid(vis_tensor, patch_size=args.patch_size, grid_size=grid_size, in_chans=args.in_chans, hidden_axis='w')
             # vis_grid_wd = patches3d_to_grid(vis_tensor, patch_size=args.patch_size, grid_size=grid_size, in_chans=args.in_chans, hidden_axis='h')
 
-            print("wandb logging")
-            vis_grid_hw = wandb.Image(vis_grid_hw, caption=f"hw_iter{niters:06d}")
-            # vis_grid_hd = wandb.Image(vis_grid_hd, caption=f"hd_iter{niters:06d}")
-            # vis_grid_wd = wandb.Image(vis_grid_wd, caption=f"wd_iter{niters:06d}")
+            if not args.disable_wandb:
+                print("wandb logging")
+                vis_grid_hw = wandb.Image(vis_grid_hw, caption=f"hw_iter{niters:06d}")
+                # vis_grid_hd = wandb.Image(vis_grid_hd, caption=f"hd_iter{niters:06d}")
+                # vis_grid_wd = wandb.Image(vis_grid_wd, caption=f"wd_iter{niters:06d}")
 
-            wandb.log(
-                {
-                "vis_hw": vis_grid_hw,
-                # "vis_hd": vis_grid_hd,
-                # "vis_wd": vis_grid_wd
-                },
-                step=niters,
-            )
+                wandb.log(
+                    {
+                    "vis_hw": vis_grid_hw,
+                    # "vis_hd": vis_grid_hd,
+                    # "vis_wd": vis_grid_wd
+                    },
+                    step=niters,
+                )
+                print("finish wandb logging")
+
+            self.writer.add_image('vis_hwi', vis_grid_hw, niters)
             break
-        print("finish wandb logging")
-
 
     def resume(self):
         args = self.args

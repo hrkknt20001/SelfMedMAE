@@ -167,7 +167,7 @@ def get_train_loader(args, batch_size, workers, train_transform=None):
                                     shuffle=(train_sampler is None),
                                     num_workers=workers,
                                     sampler=train_sampler,
-                                    pin_memory=True,
+                                    pin_memory=False,
                                     persistent_workers=_persistent_workers)
     return train_loader
 
